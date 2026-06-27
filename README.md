@@ -1,4 +1,4 @@
-# 🐕 Caramelo (caramelo-sdd-opencode) - v4.1
+# 🐕 Caramelo (caramelo-sdd-opencode) - v1
 
 **Caramelo** é um plugin *Enterprise-Grade* para a IDE OpenCode focado em **Agentic Compliance** e **Spec-Driven Development (SDD)**. 
 Ao contrário de assistentes de IA genéricos (que podem ignorar testes, alucinar soluções e criar código excessivo), o Caramelo emprega técnicas extremas de **Harness Engineering** para forçar o LLM a operar num ciclo de vida estrito, limpo e determinístico.
@@ -71,4 +71,4 @@ O agente Caramelo reage aos comandos:
 - \`/caramelo refactor <nome>\`: Ativa o Modo de Refatoração Seguro (Discovery Engine + AST Tasking).
 
 ---
-**Nota Técnica:** Este projeto nasceu de uma auditoria completa (2025-2026) sobre resiliência em assistentes de programação e evoluiu da sua base V3/V4 para a V4.1, assumindo total integração com as APIs nativas do \`@opencode-ai/sdk\` para controle de sessão, símbolos, compilação de sombra e UI.
+**Nota Técnica:** Este projeto nasceu de uma auditoria completa (2025-2026) sobre resiliência em assistentes de programação, assumindo total integração com as APIs nativas do \`@opencode-ai/sdk\` para controle de sessão, símbolos, compilação de sombra e UI.
