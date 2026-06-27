@@ -1,0 +1,42 @@
+{
+  "name": "caramelo-sdd-opencode",
+  "version": "1.0.0",
+  "description": "An Enterprise-Grade Spec-Driven Development (SDD) plugin for OpenCode, featuring Harness Engineering, strict Guardrails, and an intelligent Critic Agent.",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outfile ./dist/index.js --target node",
+    "watch": "bun build ./src/index.ts --outfile ./dist/index.js --target node --watch",
+    "prepublishOnly": "bun run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marquesdavi/caramelo-sdd-opencode.git"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "caramelo",
+    "sdd",
+    "agentic-compliance",
+    "harness-engineering",
+    "guardrails"
+  ],
+  "author": "marquesdavi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/marquesdavi/caramelo-sdd-opencode/issues"
+  },
+  "homepage": "https://github.com/marquesdavi/caramelo-sdd-opencode#readme",
+  "peerDependencies": {
+    "@opencode-ai/plugin": "^1.1.25",
+    "@opencode-ai/sdk": "^1.1.25"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.0.0"
+  }
+}
