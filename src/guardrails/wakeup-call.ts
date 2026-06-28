@@ -1,17 +1,50 @@
 import { Phase } from "../types";
+import { getSessionFailCount } from "./shadow-compiler";
+import { logger } from "../utils/logger";
 
 let toolCallCount = 0;
+
+export function resetWakeupCallCount() {
+  toolCallCount = 0;
+}
 
 export async function checkWakeupCall(phase: Phase, input: any, output: any, client: any): Promise<void> {
   if (phase !== "EXECUTING") return;
   
   const toolName = input?.tool || "";
+  const sessionId = input?.sessionID || "default";
   
-  // Ignora ferramentas de leitura (incluindo MCP WebFetch, searches, views)
-  const isReadOnly = ["view_file", "list_dir", "grep_search", "search_web", "read_url_content", "read_browser_page", "mcp_", "browser_subagent", "list_resources", "read_resource", "find.text", "find.files", "find.symbols"].some(t => toolName.includes(t));
+  // Ignora ferramentas de leitura (incluindo MCP WebFetch, searches, views e ferramentas nativas do OpenCode)
+  const isReadOnly = ["read", "grep", "glob", "view_file", "list_dir", "grep_search", "search_web", "read_url_content", "read_browser_page", "mcp_", "browser_subagent", "list_resources", "read_resource", "find.text", "find.files", "find.symbols"].some(t => toolName.includes(t));
   
   // Não acorda nem incrementa contador se for apenas uma leitura pacífica
   if (isReadOnly || toolName === "search_web") {
+    return;
+  }
+
+  const failCount = getSessionFailCount(sessionId);
+
+  // Edge Case C: Hard-Stop Limit (3 ou mais falhas)
+  if (failCount >= 3) {
+    const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build 3 vezes seguidas.\nPARE IMEDIATAMENTE E PEÇA AJUDA AO HUMANO. Não tente adivinhar a solução.`;
+    try {
+      if (client && input?.sessionID) {
+        await client.session.prompt({
+          path: { id: input.sessionID },
+          body: {
+            agent: "caramelo",
+            noReply: true,
+            parts: [{ type: "text", text: msg }]
+          }
+        });
+      }
+    } catch (e) {}
+    return; // Congela o contador e envia o hard-stop
+  }
+
+  // Se o agente está em estado de Recuperação (failCount > 0), Congela a Fadiga
+  if (failCount > 0) {
+    logger.log(`🐕 [CARAMELO] Wakeup Call: Agente em modo de recuperação de build (Imunidade ativa).`);
     return;
   }
   
@@ -31,6 +64,7 @@ export async function checkWakeupCall(phase: Phase, input: any, output: any, cli
         await client.session.prompt({
           path: { id: input.sessionID },
           body: {
+            agent: "caramelo",
             noReply: true,
             parts: [{ type: "text", text: msg }]
           }

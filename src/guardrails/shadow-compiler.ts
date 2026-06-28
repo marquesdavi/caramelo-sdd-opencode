@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 import { Phase } from "../types";
+import { logger } from "../utils/logger";
 
 const execAsync = promisify(exec);
 
@@ -29,16 +30,38 @@ export function getFailFastPipeline(workspaceRoot: string): string[] {
   }
   
   const pomPath = join(workspaceRoot, "pom.xml");
-  if (existsSync(pomPath)) return ["mvn clean compile"];
+  if (existsSync(pomPath)) {
+    if (existsSync(join(workspaceRoot, "mvnw"))) {
+      return ["./mvnw clean compile"];
+    }
+    return ["mvn clean compile"];
+  }
   
   const buildGradle = join(workspaceRoot, "build.gradle");
-  if (existsSync(buildGradle)) return ["gradle classes"];
+  if (existsSync(buildGradle)) {
+    if (existsSync(join(workspaceRoot, "gradlew"))) {
+      return ["./gradlew classes"];
+    }
+    return ["gradle classes"];
+  }
   
   const goMod = join(workspaceRoot, "go.mod");
   // Para Go, 'go vet' (lint/analysis estático) é mais rápido que o build
   if (existsSync(goMod)) return ["go vet ./...", "go build ./..."];
   
   return [];
+}
+
+let isCompiling = false;
+let sessionFailCount: Record<string, number> = {};
+
+export function getSessionFailCount(sessionId: string): number {
+  return sessionFailCount[sessionId] || 0;
+}
+
+function smartTruncate(text: string): string {
+  if (text.length <= 500) return text;
+  return text.substring(0, 250) + "\n...[TRUNCATED]...\n" + text.substring(text.length - 250);
 }
 
 export async function checkShadowCompilation(workspaceRoot: string, input: any, output: any, phase: Phase, client?: any) {
@@ -60,56 +83,82 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
     return;
   }
 
-  // Se o agente explícitamente fez BYPASS, nós respeitamos
-  const replacement = input.args?.ReplacementContent || input.args?.content || input.args?.CodeContent || "";
-  if (replacement.includes("BYPASS_COMPILER")) {
-    console.log("🐕 [CARAMELO] Shadow Compilation: Bypass acionado. Pulando verificações.");
+  // Bypass via Tool Arguments (Edge Case D)
+  const argsString = JSON.stringify(input.args || {});
+  if (argsString.includes("BYPASS_COMPILER")) {
+    logger.log("🐕 [CARAMELO] Shadow Compilation: Bypass acionado nos metadados. Pulando verificações.");
     return;
   }
 
   const pipeline = getFailFastPipeline(workspaceRoot);
   if (pipeline.length === 0) return; // Se não tem ferramentas detectadas, segue a vida
 
-  console.log(`🐕 [CARAMELO] Pipeline Fail-Fast Ativado: ${pipeline.join(" -> ")}`);
+  // Mutex para Concorrência (Edge Case A)
+  if (isCompiling) {
+    logger.log("🐕 [CARAMELO] Build em andamento. Ignorando execução concorrente (Debounce).");
+    return;
+  }
+
+  logger.log(`🐕 [CARAMELO] Pipeline Fail-Fast Ativado: ${pipeline.join(" -> ")}`);
   
-  for (const cmd of pipeline) {
-    try {
-      console.log(`🐕 [CARAMELO] Executando step: '${cmd}'...`);
-      // Roda no background após a escrita (em Node, exec já é silencioso pro processo principal)
-      await execAsync(cmd, { cwd: workspaceRoot, timeout: 45000 });
-      console.log(`🐕 [CARAMELO] Step '${cmd}' passou com sucesso!`);
-    } catch (error: any) {
-      const stdout = error.stdout || "";
-      const stderr = error.stderr || "";
-      const combinedOutput = `${stdout}\\n${stderr}`.substring(0, 1500);
-
-      const msg = `🐕 [CARAMELO] SHADOW COMPILATION REPORT (Pipeline Falhou no Step: ${cmd}):\n` +
-        `A alteração que você fez no arquivo violou uma regra do projeto ou quebrou a compilação.\n\n` +
-        `Comando que falhou: ${cmd}\n` +
-        `Output da Ferramenta:\n${combinedOutput}\n\n` +
-        `Ação exigida: CORRIJA o código no próximo tool call para que este step passe.\n` +
-        `Dica YAGNI: Você esqueceu um import? Declarou variável sem usar? Modificou a assinatura de uma função sem alterar quem chama?\n` +
-        `> Se você sabe que a compilação ficará quebrada temporariamente porque está no meio de uma refatoração em cadeia, coloque o comentário "BYPASS_COMPILER" no código da sua edição.`;
-
+  const sessionId = input.sessionID || "default";
+  
+  isCompiling = true;
+  try {
+    for (const cmd of pipeline) {
       try {
-        if (client && input?.sessionID) {
-          await client.session.prompt({
-            path: { id: input.sessionID },
-            body: {
-              noReply: true,
-              parts: [{ type: "text", text: msg }]
-            }
-          });
+        logger.log(`🐕 [CARAMELO] Executando step: '${cmd}'...`);
+        // Roda no background após a escrita
+        await execAsync(cmd, { cwd: workspaceRoot, timeout: 45000 });
+        logger.log(`🐕 [CARAMELO] Step '${cmd}' passou com sucesso!`);
+        // Reset counter on success
+        sessionFailCount[sessionId] = 0;
+      } catch (error: any) {
+        const stdout = error.stdout || "";
+        const stderr = error.stderr || "";
+        const combinedOutput = smartTruncate(`${stdout}\n${stderr}`);
+
+        const fails = (sessionFailCount[sessionId] || 0) + 1;
+        sessionFailCount[sessionId] = fails;
+
+        let msg = "";
+        if (fails === 1) {
+          // Context Cleanup - Mensagem longa apenas na primeira vez
+          msg = `🐕 [CARAMELO] SHADOW COMPILATION REPORT (Pipeline Falhou no Step: ${cmd}):\n` +
+            `A alteração que você fez no arquivo violou uma regra do projeto ou quebrou a compilação.\n\n` +
+            `Comando que falhou: ${cmd}\n` +
+            `Output da Ferramenta:\n${combinedOutput}\n\n` +
+            `Ação exigida: CORRIJA o código no próximo tool call para que este step passe.\n` +
+            `Dica YAGNI: Você esqueceu um import? Declarou variável sem usar? Modificou a assinatura de uma função sem alterar quem chama?\n` +
+            `> Se você sabe que a compilação ficará quebrada temporariamente, insira [BYPASS_COMPILER] na Description da sua próxima edição.`;
+        } else {
+          // Mensagem curta para falhas subsequentes (Evitar Context Rot)
+          msg = `🐕 [CARAMELO] Falha no Build (${cmd}):\n${combinedOutput}\n(Insira [BYPASS_COMPILER] na Description da tool se precisar ignorar temporariamente).`;
         }
-      } catch (e) {
-        // Fallback: anexa ao output
-        if (output && typeof output.output === "string") {
-          output.output += `\n\n${msg}`;
+
+        try {
+          if (client && input?.sessionID) {
+            await client.session.prompt({
+              path: { id: input.sessionID },
+              body: {
+                agent: "caramelo",
+                noReply: true,
+                parts: [{ type: "text", text: msg }]
+              }
+            });
+          }
+        } catch (e) {
+          // Fallback: anexa ao output
+          if (output && typeof output.output === "string") {
+            output.output += `\n\n${msg}`;
+          }
         }
+        
+        // Stop the pipeline on the first failure (Fail-Fast)
+        break;
       }
-      
-      // Stop the pipeline on the first failure (Fail-Fast)
-      break;
     }
+  } finally {
+    isCompiling = false;
   }
 }

@@ -2,25 +2,25 @@
 
 **Caramelo** é um plugin *Enterprise-Grade* para a IDE OpenCode focado em **Agentic Compliance** e **Spec-Driven Development (SDD)**. 
 
-Ao contrário de assistentes de IA genéricos (que podem ignorar testes, alucinar soluções, escrever código em locais errados ou pular etapas de planejamento), o Caramelo emprega técnicas extremas de **Harness Engineering**. Ele atua como um supervisor rigoroso, forçando o LLM a operar num ciclo de vida estrito, limpo e determinístico.
+Ao contrário de assistentes de IA genéricos que tentam agir de forma irrestrita e acabam gerando dívida técnica, o Caramelo emprega disciplinas de **Harness Engineering**. Ele atua como um exoesqueleto de fluxo de trabalho: força o LLM a operar num ciclo de vida estrito, previsível e fatiado, garantindo que todo planejamento e execução sejam documentados para facilitar a supervisão, aprovação e validação fina por parte do engenheiro de software (humano) responsável.
 
-Este projeto substitui a "esperança baseada em prompts" por *Hardened Guardrails*, interceptadores nativos e mitigação de "Context Rot", garantindo que a Inteligência Artificial entregue código de nível de produção.
+Este projeto substitui a "esperança baseada em prompts" por *Hardened Guardrails*, interceptadores nativos e mitigação de "Context Rot", elevando a qualidade e a transparência do código gerado pela Inteligência Artificial.
 
 ---
 
 ## 🏢 Valor para o Dia a Dia e Sistemas Enterprise
 
-Em sistemas críticos ou legados (Enterprise-Level), deixar um agente de IA codificar livremente é um risco à arquitetura. O Caramelo resolve os maiores problemas do uso corporativo de IAs:
+Em sistemas complexos, legados ou de alto rigor (Enterprise-Level), agentes de IA não substituem a engenharia humana — eles precisam ser guiados, contidos e validados. Deixar um LLM codificar livremente em bases de código extensas gera dívida técnica e riscos à arquitetura. O Caramelo atua como um facilitador disciplinado, garantindo que o agente prepare o terreno corretamente para a validação humana:
 
-- **Fim da Síndrome de Pressa (Anti-Rush):** O agente não sai codificando sem planejar. O Caramelo trava o agente na fase de especificação (Zero-Trust Sandbox). Se a IA tentar criar código antes da hora, o plugin bloqueia a ação a nível de sistema operacional.
-- **Segurança contra "Context Rot":** Sessões muito longas fazem a IA "esquecer" regras (Lost-in-the-Middle). O Caramelo detecta o peso da sessão e injeta *Prompt Anchoring* e diretrizes rigorosas de *Targeted Retrieval (RAG)*, forçando o agente a re-ler sua arquitetura antes de fazer qualquer besteira.
-- **Código que Realmente Compila (Fail-Fast Pipeline):** Através do *Shadow Compiler*, cada alteração no disco dispara uma checagem ordenada por custo (Lint -> Typecheck -> Compiler). Se houver erro de sintaxe ou variável não usada, o agente é notificado em milissegundos e obrigado a corrigir, entregando ao desenvolvedor apenas o que funciona.
+- **Fim da Síndrome de Pressa (Anti-Rush):** O agente é impedido de codificar sem planejar. O Caramelo trava o agente na fase de especificação (Zero-Trust Sandbox), obrigando-o a documentar a solução para que você (o engenheiro humano) possa revisar e aprovar o *design* antes que qualquer linha de código-fonte seja alterada.
+- **Segurança contra "Context Rot":** Sessões muito longas fazem a IA "esquecer" regras (Lost-in-the-Middle). O Caramelo detecta o peso da sessão e injeta *Prompt Anchoring* e diretrizes rigorosas de *Targeted Retrieval (RAG)*, forçando o agente a re-ler sua arquitetura e manter a consistência do código ao longo de refatorações complexas.
+- **Validação Preliminar Contínua (Fail-Fast Pipeline):** Através do *Shadow Compiler*, cada alteração no disco dispara uma checagem básica ordenada por custo (Lint -> Typecheck -> Compiler). O agente é forçado a resolver erros sintáticos rasos sozinho, poupando seu tempo na revisão de PRs. **Atenção:** O sistema garante apenas que o código compila; a responsabilidade de validar a lógica de negócios e a integridade da arquitetura continua sendo 100% humana.
 
 ---
 
 ## ✨ Arquitetura & Funcionalidades
 
-A arquitetura incorpora o estado da arte em controle de Inteligência Artificial para Engenharia de Software Crítica:
+A arquitetura incorpora padrões rigorosos de controle de Inteligência Artificial voltados para Sistemas Complexos:
 
 ### 1. 🔍 Discovery Engine & Graph-First Context
 O Caramelo usa a API `client.find.symbols()` do OpenCode para extrair a **Árvore Semântica (AST)** do projeto de forma nativa. O agente mapeia dependências e constrói um mapa arquitetural antes de planejar refatorações.

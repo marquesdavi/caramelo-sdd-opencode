@@ -3,6 +3,7 @@ import { promisify } from "util";
 import { join } from "path";
 import { existsSync, readFileSync } from "fs";
 import { Phase } from "../types";
+import { logger } from "../utils/logger";
 
 const execAsync = promisify(exec);
 
@@ -47,8 +48,9 @@ export async function checkVerificationGate(workspaceRoot: string, input: any, o
   const newXCount = (replacement.match(/\[x\]/gi) || []).length;
 
   // Rota de escape fluida: Se o agente explicitamente declarou BYPASS_TESTS, nós confiamos.
-  if (replacement.includes("BYPASS_TESTS")) {
-    console.log("🐕 [CARAMELO] Verification Gate: Bypass acionado. Pulando testes.");
+  const inputStr = JSON.stringify(input.args || {});
+  if (inputStr.includes("BYPASS_TESTS")) {
+    logger.log("🐕 [CARAMELO] Verification Gate: Bypass acionado. Pulando testes.");
     return;
   }
 
@@ -58,12 +60,12 @@ export async function checkVerificationGate(workspaceRoot: string, input: any, o
     const testCmd = getTestCommand(workspaceRoot);
     if (!testCmd) return; // Sem runner detectado, permite passar
     
-    console.log(`🐕 [CARAMELO] Verification Gate: Nova task concluída. Executando ${testCmd} em background...`);
+    logger.log(`🐕 [CARAMELO] Verification Gate: Nova task concluída. Executando ${testCmd} em background...`);
     
     try {
       // 90 segundos de timeout (para projetos grandes)
-      await execAsync(testCmd, { cwd: workspaceRoot, timeout: 90000 });
-      console.log(`🐕 [CARAMELO] Verification Gate: Testes passaram!`);
+      await execAsync(testCmd, { cwd: workspaceRoot, timeout: 60000 });
+      logger.log(`🐕 [CARAMELO] Verification Gate: Testes passaram!`);
     } catch (error: any) {
       const stdout = error.stdout || "";
       const stderr = error.stderr || "";

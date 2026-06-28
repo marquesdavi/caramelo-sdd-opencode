@@ -15,6 +15,7 @@ export function loadState(workspaceRoot: string): State {
       specType: "feature",
       activeSpec: null,
       specDir: null,
+      awaitingInitialInput: false,
       tasks: { total: 0, completed: 0, current: null },
       history: [],
     };
@@ -30,6 +31,7 @@ export function loadState(workspaceRoot: string): State {
       specType: "feature",
       activeSpec: null,
       specDir: null,
+      awaitingInitialInput: false,
       tasks: { total: 0, completed: 0, current: null },
       history: [],
     };

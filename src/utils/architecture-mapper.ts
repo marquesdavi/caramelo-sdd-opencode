@@ -1,5 +1,6 @@
 import { join } from "path";
 import { writeFileSync, existsSync, mkdirSync } from "fs";
+import { logger } from "./logger";
 
 export async function generateArchitectureMap(workspaceRoot: string, client: any, alvo: string) {
   try {
@@ -11,7 +12,7 @@ export async function generateArchitectureMap(workspaceRoot: string, client: any
 
     const symbols = result.data;
     if (!Array.isArray(symbols) || symbols.length === 0) {
-      console.log("Nenhum símbolo encontrado no projeto.");
+      logger.log("Nenhum símbolo encontrado no projeto.");
       return;
     }
 
@@ -47,10 +48,10 @@ export async function generateArchitectureMap(workspaceRoot: string, client: any
     const outPath = join(outDir, "architecture_map.md");
     writeFileSync(outPath, markdown, "utf-8");
 
-    console.log(`[CARAMELO] Mapa Arquitetural gerado com ${symbols.length} símbolos em ${outPath}`);
+    logger.log(`[CARAMELO] Mapa Arquitetural gerado com ${symbols.length} símbolos em ${outPath}`);
 
   } catch (error) {
-    console.error("Erro ao gerar o architecture_map.md:", error);
+    logger.error("Erro ao gerar o architecture_map.md: " + error);
   }
 }
 

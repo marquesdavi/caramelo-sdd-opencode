@@ -1,21 +1,23 @@
 import { Plugin } from "@opencode-ai/plugin";
 import { detectOrInitCaramelo } from "./utils/detection";
 import { buildCarameloAgent } from "./config/agent";
-import { loadState, transitionToPhase } from "./engine/state-machine";
+import { loadState, transitionToPhase, saveState } from "./engine/state-machine";
 import { loadSteeringContext } from "./guardrails/steering-loader";
 import { loadGraphifyContext } from "./integrations/graphify";
 import { createToolInterceptor } from "./guardrails/tool-interceptor";
-import { checkWakeupCall } from "./guardrails/wakeup-call";
+import { checkWakeupCall, resetWakeupCallCount } from "./guardrails/wakeup-call";
 import { checkVerificationGate } from "./guardrails/verification-gate";
 import { checkShadowCompilation } from "./guardrails/shadow-compiler";
 import { checkCircuitBreaker, resetCircuitBreaker } from "./guardrails/circuit-breaker";
 import { buildSystemPrompt } from "./prompts/system";
 import { generateArchitectureMap } from "./utils/architecture-mapper";
 import { join } from "path";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, mkdirSync } from "fs";
+import { initLogger, logger } from "./utils/logger";
 
 export const CarameloPlugin: Plugin = async ({ directory, client }) => {
   const workspaceRoot = directory;
+  initLogger(workspaceRoot);
 
   if (!detectOrInitCaramelo(workspaceRoot)) {
     return {};
@@ -59,11 +61,20 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
     "chat.message": async (input, output) => {
       const msg: any = output.message;
       const text = msg?.content || (msg?.parts?.find((p: any) => p.type === "text") as any)?.text || "";
-      if (!text.startsWith("/caramelo")) return;
+      const state = loadState(workspaceRoot);
+      
+      // Se não é um comando caramelo, mas estamos esperando o input inicial
+      if (!text.startsWith("/caramelo")) {
+        if (state.awaitingInitialInput) {
+          state.awaitingInitialInput = false;
+          saveState(workspaceRoot, state);
+          // Permite que a mensagem vá para o agente normalmente
+        }
+        return;
+      }
 
       const [, cmd, ...rest] = text.split(" ");
       const arg = rest.join(" ");
-      const state = loadState(workspaceRoot);
 
       switch (cmd) {
         case "status":
@@ -77,7 +88,6 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
             transitionToPhase(workspaceRoot, "TASKS");
             output.parts = [{ type: "text", text: `🐕 Pulando para a próxima fase: TASKS...` } as any];
           } else if (state.phase === "TASKS") {
-            // Fase 3: Validação Estrutural AST para Refactoring
             if (state.specType === "refactor") {
               const tasksPath = join(workspaceRoot, ".caramelo/specs", state.activeSpec || "", "tasks.md");
               if (existsSync(tasksPath)) {
@@ -106,19 +116,43 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
         case "feature":
         case "bugfix":
         case "refactor":
-          // Iniciar spec do tipo feature/bugfix/refactor. Lógica simplificada de state-machine.
-          state.phase = "REQUIREMENTS";
-          state.specType = cmd as any;
-          state.activeSpec = arg || `new-${cmd}`;
-          // Idealmente usaria saveState
-          transitionToPhase(workspaceRoot, "REQUIREMENTS");
+          // Formata o título se o usuário passou um texto
+          let specTitle = `new-${cmd}`;
+          if (arg) {
+            if (arg.includes(" ")) {
+              // Transforma em slug
+              specTitle = arg.trim()
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+                .replace(/[^a-z0-9 ]/g, "")      // Remove caracteres especiais
+                .split(/\s+/)
+                .slice(0, 5)                     // Pega até as 5 primeiras palavras
+                .join("-");
+            } else {
+              specTitle = arg;
+            }
+          }
+
+          // Iniciar spec do tipo feature/bugfix/refactor.
+          const newState = loadState(workspaceRoot);
+          newState.phase = "REQUIREMENTS";
+          newState.specType = cmd as any;
+          newState.activeSpec = specTitle;
+          newState.awaitingInitialInput = true; // Trava ativada!
+          
+          // Prepara o diretório
+          const specDir = join(workspaceRoot, ".caramelo/specs", newState.activeSpec || "");
+          mkdirSync(specDir, { recursive: true });
+          
+          // Salva o estado corretamente
+          saveState(workspaceRoot, newState);
+          resetWakeupCallCount();
 
           if (cmd === "refactor" && client) {
-            output.parts = [{ type: "text", text: `🐕 Iniciando spec de Refactoring para '${state.activeSpec}'.\n⚙️ Extraindo Símbolos e gerando Mapa Arquitetural...` } as any];
-            // Roda o discovery assincronamente (ou aguarda)
-            await generateArchitectureMap(workspaceRoot, client, state.activeSpec || "");
+            output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec de Refatoração baseada no texto que ele digitou. O título gerado foi '${newState.activeSpec}'.\nO ambiente foi preparado. Sua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem (ou algo muito parecido):\n"🐕 Ambiente preparado para Refatoração em **${newState.activeSpec}**.\nA pasta foi criada e o sistema está pronto.\n\nPor favor, me explique com o máximo de detalhes:\n1. O que você deseja refatorar?\n2. Qual é o escopo exato (quais arquivos ou módulos estão envolvidos)?\n3. Quais são as regras de negócio ou dependências que eu devo ter cuidado?"\n\nNÃO inicie nenhuma busca de arquivos. APENAS faça essas perguntas ao usuário e aguarde a resposta.` } as any];
           } else {
-            output.parts = [{ type: "text", text: `🐕 Iniciando spec do tipo '${cmd}' para '${state.activeSpec}'.` } as any];
+            output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec do tipo '${cmd}' com o seguinte título gerado: '${newState.activeSpec}'.\nO ambiente foi preparado. Sua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem:\n"🐕 Ambiente preparado para a spec **${newState.activeSpec}**.\nA pasta foi criada.\n\nPara começarmos a fase REQUIREMENTS, me explique:\n1. Qual é o objetivo desta funcionalidade/correção?\n2. Quais são os requisitos técnicos ou de negócios?"\n\nNÃO inicie nenhuma busca. APENAS pergunte e aguarde.` } as any];
           }
           break;
       }
@@ -232,6 +266,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
             const criticResult = await client.session.prompt({
               path: { id: criticSession.data.id },
               body: {
+                agent: "caramelo",
                 outputFormat: {
                   type: "json_schema",
                   schema: {
@@ -317,7 +352,7 @@ Após esta compactação, você DEVE tomar as seguintes ações, em ordem:
 
     event: async ({ event }) => {
       if (event.type === "session.compacted") {
-        console.log("🐕 [CARAMELO] Sessão compactada. Pausa obrigatória ativada.");
+        logger.log("🐕 [CARAMELO] Sessão compactada. Pausa obrigatória ativada.");
         if (client && client.global) {
           await client.tui.showToast({
             body: {

@@ -46,10 +46,7 @@ export const PHASE_CONFIGS: Record<Phase, PhaseConfig> = {
     temperature: 0.3,
     permissions: {
       read: "allow",
-      edit: {
-        ".caramelo/**": "allow",
-        "*": "deny",
-      },
+      edit: "allow",
       bash: {
         "*": "allow",
         "ls *": "allow", "cat *": "allow", "grep *": "allow",
@@ -65,10 +62,7 @@ export const PHASE_CONFIGS: Record<Phase, PhaseConfig> = {
     temperature: 0.1,
     permissions: {
       read: "allow",
-      edit: {
-        ".caramelo/**": "allow",
-        "*": "deny",
-      },
+      edit: "allow",
       bash: {
         "*": "allow",
         "ls *": "allow", "cat *": "allow", "grep *": "allow",
@@ -84,10 +78,7 @@ export const PHASE_CONFIGS: Record<Phase, PhaseConfig> = {
     temperature: 0.0,
     permissions: {
       read: "allow",
-      edit: {
-        ".caramelo/**": "allow",
-        "*": "deny",
-      },
+      edit: "allow",
       bash: {
         "*": "allow",
         "ls *": "allow", "cat *": "allow", "grep *": "allow",

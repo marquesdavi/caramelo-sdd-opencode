@@ -5,13 +5,9 @@ import { CARAMELO_DIR, SPECS_DIR, TEMPLATES_DIR } from "../types";
 // Extensões de script "preguiçoso" que o agente não deve criar durante refatoração
 const LAZY_SCRIPT_EXTENSIONS = [".py", ".rb", ".ps1"];
 
-// Padrões de comando bash destrutivos: sed/awk em código-fonte, pipes para /dev/null
+// Padrões de comando bash destrutivos: pipes para /dev/null
 const DESTRUCTIVE_BASH_PATTERNS = [
-  /\bsed\s+-i/,            // sed in-place em arquivos
-  /\bawk\s+.*\{.*print/,   // awk com reescrita de output
-  /\bperl\s+-i/,           // perl in-place
   /\/dev\/null/,           // qualquer pipe para /dev/null
-  /\btr\s+.*\|/,           // tr com pipe (substituição em massa)
 ];
 
 // Padrões de arquivos de teste que NÃO devem ser deletados
@@ -28,13 +24,22 @@ const TEST_FILE_PATTERNS = [
 export function createToolInterceptor(workspaceRoot: string) {
   return async (input: any, output: any) => {
     const state = loadState(workspaceRoot);
+    
+    if (state.awaitingInitialInput) {
+      throw new Error(
+        `🐕 [CARAMELO] BLOQUEIO DETERMINÍSTICO:\n` +
+        `Você AINDA NÃO PODE usar ferramentas (ler arquivos, rodar comandos ou editar) porque o usuário acabou de iniciar a spec e você precisa aguardar a explicação dele.\n` +
+        `Sua ÚNICA tarefa agora é responder ao usuário no chat (fazendo as perguntas de escopo para começarmos) e aguardar a resposta dele.`
+      );
+    }
+
     const phase = state.phase;
 
     // ─── FASES DE SPEC: Bloqueia edição de código e restringe bash ───────────
     if (["REQUIREMENTS", "DESIGN", "TASKS"].includes(phase)) {
       const editTools = ["edit", "write", "patch", "multi_replace_file_content", "replace_file_content", "write_to_file"];
       if (editTools.includes(input.tool)) {
-        const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || "";
+        const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || output.args?.AbsolutePath || "";
         const absoluteTarget = resolve(workspaceRoot, targetPath);
         const absoluteSpecsDir = resolve(workspaceRoot, CARAMELO_DIR, SPECS_DIR);
         const absoluteTemplatesDir = resolve(workspaceRoot, CARAMELO_DIR, TEMPLATES_DIR);
@@ -84,10 +89,17 @@ export function createToolInterceptor(workspaceRoot: string) {
         const allowedCommands = ["ls", "cat", "grep", "find", "pwd", "git", "echo"];
         
         if (!allowedCommands.includes(commandBase)) {
-          throw new Error(
-            `🐕 [CARAMELO] Fase "${phase}": ` +
-            `Comando "${commandBase}" não autorizado. Apenas comandos read-only analíticos permitidos na fase de especificação.`
-          );
+          // Permite comandos de edição via bash APENAS se estiverem manipulando arquivos da spec
+          const isTargetingSpec = cmd.includes(".caramelo/specs/");
+          const isTargetingSource = cmd.includes("src/") || cmd.includes("pom.xml") || cmd.includes("package.json") || cmd.includes("main/");
+          
+          if (!isTargetingSpec || isTargetingSource) {
+            throw new Error(
+              `🐕 [CARAMELO] Fase "${phase}": ` +
+              `Comando "${commandBase}" não autorizado.\n` +
+              `Apenas comandos analíticos são permitidos, a menos que você esteja editando um arquivo em '.caramelo/specs/'.`
+            );
+          }
         }
       }
     }
@@ -97,7 +109,7 @@ export function createToolInterceptor(workspaceRoot: string) {
       const editTools = ["edit", "write", "patch", "multi_replace_file_content", "replace_file_content", "write_to_file"];
       
       if (editTools.includes(input.tool)) {
-        const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || "";
+        const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || output.args?.AbsolutePath || "";
         const absoluteTarget = resolve(workspaceRoot, targetPath);
         const absoluteSpecsDir = resolve(workspaceRoot, CARAMELO_DIR, SPECS_DIR);
         

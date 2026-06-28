@@ -13,6 +13,7 @@ export interface State {
   specType: SpecType;
   activeSpec: string | null;
   specDir: string | null;
+  awaitingInitialInput?: boolean;
   tasks: TaskState;
   history: Array<{
     phase: Phase;
