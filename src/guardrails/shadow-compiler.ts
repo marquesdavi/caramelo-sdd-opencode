@@ -6,35 +6,42 @@ import { Phase } from "../types";
 
 const execAsync = promisify(exec);
 
-export function getCompilerCommand(workspaceRoot: string): string | null {
+export function getFailFastPipeline(workspaceRoot: string): string[] {
+  const pipeline: string[] = [];
+  
   const packageJsonPath = join(workspaceRoot, "package.json");
   if (existsSync(packageJsonPath)) {
     try {
       const pkg = JSON.parse(readFileSync(packageJsonPath, "utf-8"));
-      // Em Projetos Angular/React/Vite, 'build' geralmente roda o tsc antes
+      // 1. Step mais barato: Lint
+      if (pkg.scripts && pkg.scripts.lint) {
+        pipeline.push("npm run lint");
+      }
+      // 2. Step intermediário/caro: Build / Typecheck
       if (pkg.scripts && pkg.scripts.build) {
-        return "npm run build";
+        pipeline.push("npm run build");
+      } else if (existsSync(join(workspaceRoot, "tsconfig.json"))) {
+        pipeline.push("npx tsc --noEmit");
       }
-      // Se não tem script de build explícito, mas é TypeScript
-      if (existsSync(join(workspaceRoot, "tsconfig.json"))) {
-        return "npx tsc --noEmit";
-      }
+      
+      if (pipeline.length > 0) return pipeline;
     } catch (e) {}
   }
   
   const pomPath = join(workspaceRoot, "pom.xml");
-  if (existsSync(pomPath)) return "mvn clean compile";
+  if (existsSync(pomPath)) return ["mvn clean compile"];
   
   const buildGradle = join(workspaceRoot, "build.gradle");
-  if (existsSync(buildGradle)) return "gradle classes";
+  if (existsSync(buildGradle)) return ["gradle classes"];
   
   const goMod = join(workspaceRoot, "go.mod");
-  if (existsSync(goMod)) return "go build ./...";
+  // Para Go, 'go vet' (lint/analysis estático) é mais rápido que o build
+  if (existsSync(goMod)) return ["go vet ./...", "go build ./..."];
   
-  return null;
+  return [];
 }
 
-export async function checkShadowCompilation(workspaceRoot: string, input: any, output: any, phase: Phase) {
+export async function checkShadowCompilation(workspaceRoot: string, input: any, output: any, phase: Phase, client?: any) {
   // Shadow compilation só é restritiva em EXECUTING
   if (phase !== "EXECUTING") return;
 
@@ -56,33 +63,53 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
   // Se o agente explícitamente fez BYPASS, nós respeitamos
   const replacement = input.args?.ReplacementContent || input.args?.content || input.args?.CodeContent || "";
   if (replacement.includes("BYPASS_COMPILER")) {
-    console.log("🐕 [CARAMELO] Shadow Compilation: Bypass acionado. Pulando compilador.");
+    console.log("🐕 [CARAMELO] Shadow Compilation: Bypass acionado. Pulando verificações.");
     return;
   }
 
-  const compilerCmd = getCompilerCommand(workspaceRoot);
-  if (!compilerCmd) return; // Se não tem compilador tipado, segue a vida
+  const pipeline = getFailFastPipeline(workspaceRoot);
+  if (pipeline.length === 0) return; // Se não tem ferramentas detectadas, segue a vida
 
-  console.log(`🐕 [CARAMELO] Shadow Compilation: Verificando integridade de código com '${compilerCmd}'...`);
+  console.log(`🐕 [CARAMELO] Pipeline Fail-Fast Ativado: ${pipeline.join(" -> ")}`);
   
-  try {
-    // Roda o compilador no background após a escrita (em Node, exec já é silencioso pro processo principal)
-    // Usamos um timeout razoável para build (45s)
-    await execAsync(compilerCmd, { cwd: workspaceRoot, timeout: 45000 });
-    console.log(`🐕 [CARAMELO] Shadow Compilation: Build perfeitamente íntegro!`);
-  } catch (error: any) {
-    const stdout = error.stdout || "";
-    const stderr = error.stderr || "";
-    const combinedOutput = `${stdout}\\n${stderr}`.substring(0, 1500);
+  for (const cmd of pipeline) {
+    try {
+      console.log(`🐕 [CARAMELO] Executando step: '${cmd}'...`);
+      // Roda no background após a escrita (em Node, exec já é silencioso pro processo principal)
+      await execAsync(cmd, { cwd: workspaceRoot, timeout: 45000 });
+      console.log(`🐕 [CARAMELO] Step '${cmd}' passou com sucesso!`);
+    } catch (error: any) {
+      const stdout = error.stdout || "";
+      const stderr = error.stderr || "";
+      const combinedOutput = `${stdout}\\n${stderr}`.substring(0, 1500);
 
-    throw new Error(
-      `🐕 [CARAMELO] SHADOW COMPILATION BLOQUEOU SUA EDIÇÃO (Erro de Sintaxe / Mapeamento):\n` +
-      `A alteração que você fez no arquivo quebrou a compilação do projeto.\n\n` +
-      `Comando executado pelo Guardrail: ${compilerCmd}\n` +
-      `Output do Compilador:\n${combinedOutput}\n\n` +
-      `Ação exigida: CORRIJA o código no próximo tool call para que ele volte a compilar.\n` +
-      `Dica YAGNI: Você inventou um método que não existe? Você alterou a assinatura de uma função sem atualizar quem chama?\n` +
-      `> Se você sabe que o build ficará quebrado temporariamente porque está no meio de uma refatoração em cadeia, coloque o comentário "BYPASS_COMPILER" no código da sua edição para autorizar o bloqueio.`
-    );
+      const msg = `🐕 [CARAMELO] SHADOW COMPILATION REPORT (Pipeline Falhou no Step: ${cmd}):\n` +
+        `A alteração que você fez no arquivo violou uma regra do projeto ou quebrou a compilação.\n\n` +
+        `Comando que falhou: ${cmd}\n` +
+        `Output da Ferramenta:\n${combinedOutput}\n\n` +
+        `Ação exigida: CORRIJA o código no próximo tool call para que este step passe.\n` +
+        `Dica YAGNI: Você esqueceu um import? Declarou variável sem usar? Modificou a assinatura de uma função sem alterar quem chama?\n` +
+        `> Se você sabe que a compilação ficará quebrada temporariamente porque está no meio de uma refatoração em cadeia, coloque o comentário "BYPASS_COMPILER" no código da sua edição.`;
+
+      try {
+        if (client && input?.sessionID) {
+          await client.session.prompt({
+            path: { id: input.sessionID },
+            body: {
+              noReply: true,
+              parts: [{ type: "text", text: msg }]
+            }
+          });
+        }
+      } catch (e) {
+        // Fallback: anexa ao output
+        if (output && typeof output.output === "string") {
+          output.output += `\n\n${msg}`;
+        }
+      }
+      
+      // Stop the pipeline on the first failure (Fail-Fast)
+      break;
+    }
   }
 }

@@ -26,6 +26,14 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
       const state = loadState(workspaceRoot);
       if (!input.agent) input.agent = {};
       input.agent["caramelo"] = buildCarameloAgent(state.phase, state) as any;
+
+      if (!input.command) input.command = {};
+      input.command["caramelo status"] = { template: "/caramelo status", description: "Mostra a fase atual e as tasks pendentes do SDD.", agent: "caramelo" };
+      input.command["caramelo skip"] = { template: "/caramelo skip", description: "Pula para a próxima fase do SDD (Design, Tasks, Executing).", agent: "caramelo" };
+      input.command["caramelo reset"] = { template: "/caramelo reset", description: "Cancela o SDD atual e volta para a fase IDLE.", agent: "caramelo" };
+      input.command["caramelo feature"] = { template: "/caramelo feature ", description: "Inicia uma nova spec de Feature. Digite o nome em seguida.", agent: "caramelo" };
+      input.command["caramelo bugfix"] = { template: "/caramelo bugfix ", description: "Inicia uma nova spec de Bugfix. Digite o nome em seguida.", agent: "caramelo" };
+      input.command["caramelo refactor"] = { template: "/caramelo refactor ", description: "Inicia uma spec de Refactoring Seguro. Digite o nome em seguida.", agent: "caramelo" };
     },
 
     "experimental.chat.system.transform": async (input, output) => {
@@ -95,11 +103,12 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
           transitionToPhase(workspaceRoot, "IDLE");
           output.parts = [{ type: "text", text: `🐕 Resetando fluxo para IDLE.` } as any];
           break;
+        case "feature":
         case "bugfix":
         case "refactor":
-          // Iniciar spec do tipo bugfix/refactor. Lógica simplificada de state-machine.
+          // Iniciar spec do tipo feature/bugfix/refactor. Lógica simplificada de state-machine.
           state.phase = "REQUIREMENTS";
-          state.specType = cmd;
+          state.specType = cmd as any;
           state.activeSpec = arg || `new-${cmd}`;
           // Idealmente usaria saveState
           transitionToPhase(workspaceRoot, "REQUIREMENTS");
@@ -135,8 +144,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
           }
         }
 
-        // 1. Wakeup Call (Apenas EXECUTING)
-        checkWakeupCall(state.phase);
+        // 1. Wakeup Call foi movido para tool.execute.after para não usar throw Error
 
         // 2. Verification Gate (Run tests before marking [x] in tasks.md)
         await checkVerificationGate(workspaceRoot, input, output, state.phase);
@@ -158,11 +166,14 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
 
       try {
         // ─── Shadow Compilation (Fase 2) ───
-        // Executa após a escrita no disco. Se quebrar, joga erro pro modelo reverter
-        await checkShadowCompilation(workspaceRoot, input, output, state.phase);
+        // Executa após a escrita no disco. Reporta erros via prompt silencioso.
+        await checkShadowCompilation(workspaceRoot, input, output, state.phase, client);
       } catch (err: any) {
         throw err;
       }
+      
+      // Injeta o Wakeup Call via client.session.prompt (sem interromper a AI)
+      await checkWakeupCall(state.phase, input, output, client);
 
       // ─── Ralph Loop (Stateless Task Loop) ───
       // Se completou múltiplas de 3 tasks, sugere e força a compactação do contexto
@@ -275,43 +286,32 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
       const currentState = loadState(workspaceRoot);
 
       if (currentState.activeSpec) {
-        const specDir = join(workspaceRoot, currentState.specDir!);
-        const reqPath = currentState.specType === "bugfix" ? "bugfix.md" : "requirements.md";
-        const req = existsSync(join(specDir, reqPath)) ? readFileSync(join(specDir, reqPath), "utf-8") : "";
-        const design = existsSync(join(specDir, "design.md")) ? readFileSync(join(specDir, "design.md"), "utf-8") : "";
-        const tasks = existsSync(join(specDir, "tasks.md")) ? readFileSync(join(specDir, "tasks.md"), "utf-8") : "";
-
-        const truncate = (str: string, len: number) => str.length > len ? str.substring(0, len) + "...\\n(truncado)" : str;
-
         if (!output.context) output.context = [];
 
         output.context.push(`
-## 🐕 Caramelo — Estado SDD (NÃO PERCA ESTE CONTEXTO)
+## 🐕 Caramelo — Estado SDD Pós-Compactação (CRÍTICO)
 - **Fase**: ${currentState.phase}
 - **SpecType**: ${currentState.specType}
-- **Spec**: ${currentState.activeSpec}
+- **Spec Ativa**: ${currentState.activeSpec}
 - **Tasks**: ${currentState.tasks.completed}/${currentState.tasks.total}
 
-### Requirements (resumo)
-${truncate(req, 400)}
-
-### Design (resumo)
-${truncate(design, 400)}
-
-### Tasks pendentes
-${tasks || "Nenhuma"}
-        `.trim());
+⚠️ **AVISO DE AMNÉSIA DE CONTEXTO (CONTEXT ROT MITIGATION)** ⚠️
+A sessão acaba de ser compactada pelo Ralph Loop para preservar sua performance e foco.
+O histórico longo de conversas e logs de terminal foi APAGADO.
+`);
       }
 
       if (!output.context) output.context = [];
       output.context.push(`
-## 🐕 INSTRUÇÃO PÓS-COMPACTAÇÃO (OBRIGATÓRIO)
-Após esta compactação, você DEVE:
-1. Informar ao humano que houve uma compactação de contexto
-2. Resumir brevemente o estado atual (fase, spec, tasks)
-3. Extrair e listar brevemente as 3 principais "Decisões Arquiteturais" tomadas recentemente, para que o conhecimento crítico não se perca
-4. PERGUNTAR: "Houve uma compactação. Posso continuar de onde parei?"
-5. NÃO tomar NENHUMA ação até receber aprovação explícita
+## 🐕 INSTRUÇÃO DE RECUPERAÇÃO DE MEMÓRIA (RAG)
+Para evitar alucinações (Context Rot), você está terminantemente PROIBIDO de continuar a execução da próxima task confiando apenas no que você acha que lembra do design arquitetural.
+
+Após esta compactação, você DEVE tomar as seguintes ações, em ordem:
+1. Informar ao humano que a sessão foi compactada para manter o agente com alta precisão.
+2. Usar sua ferramenta de ler arquivo (\`view_file\`) para LER NA ÍNTEGRA o \`design.md\` e o \`tasks.md\` da spec ativa. Esta é sua Memória Persistente.
+3. Extrair os princípios de arquitetura do design.md lido e sumarizá-los brevemente para ancorar seu novo contexto (Prompt Anchoring).
+4. PERGUNTAR: "Contexto recuperado com sucesso. Posso prosseguir com a próxima task?"
+5. NÃO tome NENHUMA ação destrutiva ou edição de código até ler os arquivos base e receber aprovação.
       `.trim());
     },
 

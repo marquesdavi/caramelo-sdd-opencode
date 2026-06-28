@@ -52,6 +52,30 @@ export function createToolInterceptor(workspaceRoot: string) {
             `Arquivo tentado: ${absoluteTarget}`
           );
         }
+
+        if (isSpecFile) {
+          const fileName = basename(absoluteTarget);
+          if (phase === "REQUIREMENTS") {
+            if (fileName === "design.md" || fileName === "tasks.md") {
+              throw new Error(
+                `🐕 [CARAMELO] ANTI-RUSH BLOQUEADO — Fase "REQUIREMENTS":\n` +
+                `Você está tentando escrever o arquivo '${fileName}' prematuramente.\n` +
+                `Nesta fase, você só tem permissão para escrever o requirements.md ou bugfix.md.\n` +
+                `Se você já concluiu os requisitos, PARE E PERGUNTE ao humano se pode avançar para a fase DESIGN.`
+              );
+            }
+          } else if (phase === "DESIGN") {
+            if (fileName === "tasks.md") {
+              throw new Error(
+                `🐕 [CARAMELO] ANTI-RUSH BLOQUEADO — Fase "DESIGN":\n` +
+                `Você está tentando escrever o arquivo '${fileName}' prematuramente.\n` +
+                `Nesta fase, você só tem permissão para escrever o design.md (e ajustar requirements.md se necessário).\n` +
+                `Se você já concluiu o design arquitetural, PARE E PERGUNTE ao humano se pode avançar para a fase TASKS.`
+              );
+            }
+          }
+        }
+
       }
 
       if (input.tool === "run_command" || input.tool === "bash") {
