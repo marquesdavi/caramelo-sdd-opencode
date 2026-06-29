@@ -1,5 +1,6 @@
 import { Phase } from "../types";
 import { getSessionFailCount } from "./shadow-compiler";
+import { loadState, saveState } from "../engine/state-machine";
 import { logger } from "../utils/logger";
 
 let toolCallCount = 0;
@@ -8,7 +9,7 @@ export function resetWakeupCallCount() {
   toolCallCount = 0;
 }
 
-export async function checkWakeupCall(phase: Phase, input: any, output: any, client: any): Promise<void> {
+export async function checkWakeupCall(workspaceRoot: string, phase: Phase, input: any, output: any, client: any): Promise<void> {
   if (phase !== "EXECUTING") return;
   
   const toolName = input?.tool || "";
@@ -24,10 +25,17 @@ export async function checkWakeupCall(phase: Phase, input: any, output: any, cli
 
   const failCount = getSessionFailCount(sessionId);
 
-  // Edge Case C: Hard-Stop Limit (3 ou mais falhas)
+  // Edge Case C & D: Hard-Stop Limit (3 ou mais falhas) com trava Sistêmica
   if (failCount >= 3) {
     const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build 3 vezes seguidas.\nPARE IMEDIATAMENTE E PEÇA AJUDA AO HUMANO. Não tente adivinhar a solução.`;
     try {
+      // Ativa o bloqueio sistêmico (impedido de chamar ferramentas)
+      const state = loadState(workspaceRoot);
+      state.awaitingInitialInput = true;
+      saveState(workspaceRoot, state);
+      
+      logger.log("🐕 [CARAMELO] Hard Stop Sistêmico ativado via Wakeup Call.");
+
       if (client && input?.sessionID) {
         await client.session.prompt({
           path: { id: input.sessionID },

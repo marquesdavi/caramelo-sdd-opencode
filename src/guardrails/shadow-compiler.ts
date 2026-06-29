@@ -59,9 +59,42 @@ export function getSessionFailCount(sessionId: string): number {
   return sessionFailCount[sessionId] || 0;
 }
 
-function smartTruncate(text: string): string {
+function semanticTruncate(text: string): string {
   if (text.length <= 500) return text;
-  return text.substring(0, 250) + "\n...[TRUNCATED]...\n" + text.substring(text.length - 250);
+  
+  const lines = text.split('\n');
+  const errorKeywords = ["[error]", "error:", "err!", "exception", "failed", "cannot find", "error ts"];
+  
+  let resultLines: string[] = [];
+  let includeNextLines = 0;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Remove ANSI escape codes (cores, bold, etc) e converte para lowercase
+    const normalizedLine = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').toLowerCase();
+    const isError = errorKeywords.some(kw => normalizedLine.includes(kw));
+    
+    if (isError) {
+      resultLines.push(line);
+      includeNextLines = 2; // Incluir contexto adjacente
+    } else if (includeNextLines > 0 || (resultLines.length > 0 && (line.startsWith(' ') || line.startsWith('\t')))) {
+      resultLines.push(line);
+      if (includeNextLines > 0) includeNextLines--;
+    }
+    
+    // Cap de Linhas (Edge Case C)
+    if (resultLines.length >= 15) {
+      resultLines.push("... (E mais dezenas de linhas de erro omitidas. Conserte a raiz do problema)");
+      break;
+    }
+  }
+  
+  // Fallback (Edge Case B)
+  if (resultLines.length === 0) {
+    return text.substring(0, 250) + "\n...[TRUNCATED]...\n" + text.substring(text.length - 250);
+  }
+  
+  return resultLines.join('\n');
 }
 
 export async function checkShadowCompilation(workspaceRoot: string, input: any, output: any, phase: Phase, client?: any) {
@@ -116,7 +149,7 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
       } catch (error: any) {
         const stdout = error.stdout || "";
         const stderr = error.stderr || "";
-        const combinedOutput = smartTruncate(`${stdout}\n${stderr}`);
+        const combinedOutput = semanticTruncate(`${stdout}\n${stderr}`);
 
         const fails = (sessionFailCount[sessionId] || 0) + 1;
         sessionFailCount[sessionId] = fails;

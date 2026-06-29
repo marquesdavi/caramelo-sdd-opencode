@@ -42,7 +42,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
       const state = loadState(workspaceRoot);
       const steeringContext = await loadSteeringContext(workspaceRoot);
       const graphifyContext = await loadGraphifyContext(workspaceRoot);
-      
+
       let systemPrompt = buildSystemPrompt(state.phase, steeringContext, graphifyContext, state);
 
       // Injeta o mapa arquitetural nas fases de planejamento se existir
@@ -62,7 +62,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
       const msg: any = output.message;
       const text = msg?.content || (msg?.parts?.find((p: any) => p.type === "text") as any)?.text || "";
       const state = loadState(workspaceRoot);
-      
+
       // Se não é um comando caramelo, mas estamos esperando o input inicial
       if (!text.startsWith("/caramelo")) {
         if (state.awaitingInitialInput) {
@@ -140,11 +140,11 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
           newState.specType = cmd as any;
           newState.activeSpec = specTitle;
           newState.awaitingInitialInput = true; // Trava ativada!
-          
+
           // Prepara o diretório
           const specDir = join(workspaceRoot, ".caramelo/specs", newState.activeSpec || "");
           mkdirSync(specDir, { recursive: true });
-          
+
           // Salva o estado corretamente
           saveState(workspaceRoot, newState);
           resetWakeupCallCount();
@@ -205,21 +205,21 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
       } catch (err: any) {
         throw err;
       }
-      
+
       // Injeta o Wakeup Call via client.session.prompt (sem interromper a AI)
-      await checkWakeupCall(state.phase, input, output, client);
+      await checkWakeupCall(workspaceRoot, state.phase, input, output, client);
 
       // ─── Ralph Loop (Stateless Task Loop) ───
       // Se completou múltiplas de 3 tasks, sugere e força a compactação do contexto
       // para evitar o 'context rot'.
       if (
-        state.phase === "EXECUTING" && 
-        state.tasks.completed > 0 && 
+        state.phase === "EXECUTING" &&
+        state.tasks.completed > 0 &&
         state.tasks.completed % 3 === 0
       ) {
         // Checa se a ferramenta foi uma edição para evitar loops infinitos se ele rodar run_command
         const isEditTool = ["edit", "write", "patch", "replace_file_content", "multi_replace_file_content"].includes(input.tool);
-        
+
         if (isEditTool && client && client.session && client.tui) {
           try {
             await client.tui.showToast({
@@ -247,7 +247,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
         state.tasks.completed === state.tasks.total
       ) {
         const isTasksMdEdit = ["edit", "write", "patch", "replace_file_content", "multi_replace_file_content", "write_to_file"].includes(input.tool);
-        
+
         if (isTasksMdEdit && client && client.session && client.global) {
           try {
             await client.tui.showToast({
@@ -260,7 +260,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
             } as any);
 
             const criticSession = await client.session.create({ body: { title: "Caramelo Critic" } });
-            
+
             if (!criticSession.data?.id) throw new Error("Falha ao criar sessão Critic");
 
             const criticResult = await client.session.prompt({
@@ -289,7 +289,7 @@ export const CarameloPlugin: Plugin = async ({ directory, client }) => {
             const parts = criticResult.data?.parts || [];
             const criticText = (parts.find((p: any) => p.type === "text") as any)?.text || "{}";
             const criticData = JSON.parse(criticText);
-            
+
             if (criticData.approved) {
               await client.tui.showToast({
                 body: {
