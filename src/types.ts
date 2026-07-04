@@ -5,6 +5,9 @@ export interface TaskState {
   total: number;
   completed: number;
   current: string | null;
+  lastCompactedAtTask?: number;
+  needsCompaction?: boolean;
+  compactionSessionId?: string;
 }
 
 export interface State {

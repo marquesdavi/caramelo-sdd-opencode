@@ -59,6 +59,10 @@ export function getSessionFailCount(sessionId: string): number {
   return sessionFailCount[sessionId] || 0;
 }
 
+export function resetSessionFailCount(sessionId: string): void {
+  sessionFailCount[sessionId] = 0;
+}
+
 function semanticTruncate(text: string): string {
   if (text.length <= 500) return text;
   

@@ -11,26 +11,46 @@ Se o humano quiser iniciar um fluxo SDD, ele pode pedir "spec new <feature>", "b
 
   REQUIREMENTS: {
     feature: `Você está na fase de REQUIREMENTS.
-Seu trabalho: criar/refinar o arquivo requirements.md da spec ativa.
+
+<InitializationProtocol>
+Se o humano apenas iniciou a spec (ex: informou apenas o título), NÃO explore a codebase nem faça buscas.
+Sua ÚNICA ação deve ser:
+Parar e perguntar ao humano: "Por favor, me dê os detalhes e o escopo da feature para começarmos o levantamento de requisitos."
+</InitializationProtocol>
+
+Seu trabalho contínuo: criar/refinar o arquivo requirements.md da spec ativa.
 - Capture user stories e critérios de aceitação.
 - Use notação EARS (WHEN/GIVEN/THE SYSTEM SHALL).
 - NÃO escreva código, NÃO faça design técnico.
 - Quando terminar, PERGUNTE ao humano se pode avançar para DESIGN.`,
 
     bugfix: `Você está na fase de ANÁLISE DE BUG.
-Seu trabalho: criar/refinar o arquivo bugfix.md da spec ativa.
+
+<InitializationProtocol>
+Se o humano apenas iniciou a spec (ex: informou apenas o título), NÃO saia explorando a codebase tentando adivinhar onde está o erro.
+Sua ÚNICA ação deve ser:
+Parar e pedir ao humano: "Por favor, me descreva o comportamento atual (bug) e os passos para reproduzir, ou cole o log de erro para iniciarmos."
+</InitializationProtocol>
+
+Seu trabalho contínuo: criar/refinar o arquivo bugfix.md da spec ativa.
 - Capture o defeito usando o formato:
   1. Current Behavior (Defect): WHEN [condição] THE SYSTEM [comportamento incorreto]
   2. Expected Behavior (Correction): WHEN [condição] THE SYSTEM SHALL [comportamento correto]
   3. Unchanged Behavior (Regression Prevention): WHEN [condição] THE SYSTEM SHALL CONTINUE TO [preservar]
   4. Reproduction Steps
-- Use ferramentas de leitura para investigar e reproduzir o bug.
+- Use ferramentas de leitura para investigar o bug APENAS APÓS receber os detalhes do humano.
 - NÃO escreva código, NÃO corrija nada ainda.
 - Quando terminar, PERGUNTE ao humano se pode avançar para DESIGN.`,
 
     refactor: `Você está na fase de ANÁLISE DE REFATORAÇÃO.
 
-Siga este fluxo:
+<InitializationProtocol>
+Se o humano apenas iniciou a spec (ex: informou apenas o título do refactor), NÃO explore a codebase às cegas.
+Sua ÚNICA ação deve ser:
+Parar e perguntar ao humano: "Por favor, me explique o que vamos refatorar e qual é o objetivo (ex: melhorar performance, extrair componente, etc) para que eu possa iniciar a análise."
+</InitializationProtocol>
+
+Siga este fluxo APÓS receber os detalhes iniciais:
 1. LEIA o pedido do humano com atenção.
 2. ANALISE o código-fonte relevante (use ferramentas de leitura para
    entender a estrutura, dependências e consumidores).

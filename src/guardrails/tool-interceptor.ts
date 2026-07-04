@@ -35,9 +35,23 @@ export function createToolInterceptor(workspaceRoot: string) {
 
     const phase = state.phase;
 
+    // ─── BLOQUEIO GLOBAL: config.json é protegido pelo sistema ───────────────
+    const editTools = ["edit", "write", "patch", "multi_replace_file_content", "replace_file_content", "write_to_file"];
+    if (editTools.includes(input.tool)) {
+      const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || output.args?.AbsolutePath || "";
+      const absoluteTarget = resolve(workspaceRoot, targetPath);
+      const absoluteConfigFile = resolve(workspaceRoot, CARAMELO_DIR, "config.json");
+      
+      if (absoluteTarget === absoluteConfigFile) {
+        throw new Error(
+          `🐕 [CARAMELO] ACESSO NEGADO: O arquivo config.json é o coração da máquina de estado e é READ-ONLY para a IA.\n` +
+          `Apenas o humano pode avançar as fases usando comandos do sistema (/caramelo next).`
+        );
+      }
+    }
+
     // ─── FASES DE SPEC: Bloqueia edição de código e restringe bash ───────────
     if (["REQUIREMENTS", "DESIGN", "TASKS"].includes(phase)) {
-      const editTools = ["edit", "write", "patch", "multi_replace_file_content", "replace_file_content", "write_to_file"];
       if (editTools.includes(input.tool)) {
         const targetPath = output.args?.filePath || output.args?.file || output.args?.TargetFile || output.args?.AbsolutePath || "";
         const absoluteTarget = resolve(workspaceRoot, targetPath);
@@ -47,9 +61,8 @@ export function createToolInterceptor(workspaceRoot: string) {
 
         const isSpecFile = absoluteTarget.startsWith(absoluteSpecsDir);
         const isTemplateFile = absoluteTarget.startsWith(absoluteTemplatesDir);
-        const isConfigFile = absoluteTarget === absoluteConfigFile;
 
-        if (!isSpecFile && !isTemplateFile && !isConfigFile) {
+        if (!isSpecFile && !isTemplateFile) {
           throw new Error(
             `🐕 [CARAMELO] Fase "${phase}": ` +
             `Edição de código BLOQUEADA. Segurança anti-path-traversal ativada. ` +
