@@ -21,7 +21,7 @@ export interface State {
   history: Array<{
     phase: Phase;
     approved_at: string;
-  }>;
+  } | string>;
 }
 
 export const CARAMELO_DIR = ".caramelo";

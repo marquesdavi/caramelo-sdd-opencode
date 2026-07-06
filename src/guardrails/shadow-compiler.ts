@@ -166,11 +166,11 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
             `Comando que falhou: ${cmd}\n` +
             `Output da Ferramenta:\n${combinedOutput}\n\n` +
             `Ação exigida: CORRIJA o código no próximo tool call para que este step passe.\n` +
-            `Dica YAGNI: Você esqueceu um import? Declarou variável sem usar? Modificou a assinatura de uma função sem alterar quem chama?\n` +
-            `> Se você sabe que a compilação ficará quebrada temporariamente, insira [BYPASS_COMPILER] na Description da sua próxima edição.`;
+            `Checklist rápido: (1) Esqueceu um import? (2) Deixou código morto/duplicado? (3) Mudou assinatura sem atualizar os callers?\n` +
+            `PROTOCOLO: Se esta edição faz parte de uma SEQUÊNCIA de edições interdependentes, insira [BYPASS_COMPILER] na Description das edições intermediárias. Só compile na última.`;
         } else {
           // Mensagem curta para falhas subsequentes (Evitar Context Rot)
-          msg = `🐕 [CARAMELO] Falha no Build (${cmd}):\n${combinedOutput}\n(Insira [BYPASS_COMPILER] na Description da tool se precisar ignorar temporariamente).`;
+          msg = `🐕 [CARAMELO] Falha no Build (${cmd}):\n${combinedOutput}\nANTES de editar, LEIA o arquivo com view_file para ver o estado real. Procure: imports faltando, código duplicado, métodos mortos.`;
         }
 
         try {

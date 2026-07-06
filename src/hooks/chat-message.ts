@@ -80,6 +80,14 @@ export async function handleChatMessage(workspaceRoot: string, input: any, outpu
         transitionToPhase(workspaceRoot, "EXECUTING");
         output.parts = [{ type: "text", text: `🐕 O plano de Tasks ${actionText} para a fase: EXECUTING.\n\nO ambiente de execução está destravado. Você está autorizado a iniciar a primeira task. Lembre-se do checklist de autoverificação.` } as any];
       } else if (state.phase === "EXECUTING") {
+        const st = loadState(workspaceRoot);
+        if (st.activeSpec && typeof st.activeSpec === "string") {
+          st.history.push(st.activeSpec);
+        }
+        st.activeSpec = null;
+        st.specDir = null;
+        st.tasks = { total: 0, completed: 0, current: null };
+        saveState(workspaceRoot, st);
         transitionToPhase(workspaceRoot, "IDLE");
         output.parts = [{ type: "text", text: `🐕 A spec ${actionText} para a fase: IDLE.\n\nVocê está livre de restrições de SDD.` } as any];
       } else if (state.phase === "IDLE") {
@@ -92,6 +100,11 @@ export async function handleChatMessage(workspaceRoot: string, input: any, outpu
         state.awaitingInitialInput = false;
         saveState(workspaceRoot, state);
       }
+      const resetState = loadState(workspaceRoot);
+      resetState.activeSpec = null;
+      resetState.specDir = null;
+      resetState.tasks = { total: 0, completed: 0, current: null };
+      saveState(workspaceRoot, resetState);
       transitionToPhase(workspaceRoot, "IDLE");
       output.parts = [{ type: "text", text: `🐕 Resetando fluxo para IDLE.` } as any];
       break;
@@ -118,6 +131,8 @@ export async function handleChatMessage(workspaceRoot: string, input: any, outpu
       newState.phase = "REQUIREMENTS";
       newState.specType = cmd as any;
       newState.activeSpec = specTitle;
+      newState.specDir = `.caramelo/specs/${specTitle}`;
+      newState.tasks = { total: 0, completed: 0, current: null };
       newState.awaitingInitialInput = true; // Trava ativada!
 
       const specDir = join(workspaceRoot, ".caramelo/specs", newState.activeSpec || "");
@@ -127,9 +142,9 @@ export async function handleChatMessage(workspaceRoot: string, input: any, outpu
       resetWakeupCallCount();
 
       if (cmd === "refactor" && client) {
-        output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec de Refatoração baseada no texto que ele digitou. O título gerado foi '${newState.activeSpec}'.\nO ambiente foi preparado. Sua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem (ou algo muito parecido):\n"🐕 Ambiente preparado para Refatoração em **${newState.activeSpec}**.\nA pasta foi criada e o sistema está pronto.\n\nPor favor, me explique com o máximo de detalhes:\n1. O que você deseja refatorar?\n2. Qual é o escopo exato (quais arquivos ou módulos estão envolvidos)?\n3. Quais são as regras de negócio ou dependências que eu devo ter cuidado?"\n\nNÃO inicie nenhuma busca de arquivos. APENAS faça essas perguntas ao usuário e aguarde a resposta.` } as any];
+        output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec de Refatoração baseada no texto que ele digitou. O título gerado foi '${newState.activeSpec}'.\nO ambiente foi preparado e a pasta '.caramelo/specs/${newState.activeSpec}/' foi criada para você armazenar os artefatos (requirements.md, design.md, tasks.md).\n\nSua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem (ou algo muito parecido):\n"🐕 Ambiente preparado para Refatoração em **${newState.activeSpec}**.\nA pasta '.caramelo/specs/${newState.activeSpec}' foi criada e o sistema está pronto.\n\nPor favor, me explique com o máximo de detalhes:\n1. O que você deseja refatorar?\n2. Qual é o escopo exato (quais arquivos ou módulos estão envolvidos)?\n3. Quais são as regras de negócio ou dependências que eu devo ter cuidado?"\n\nNÃO inicie nenhuma busca de arquivos. APENAS faça essas perguntas ao usuário e aguarde a resposta.` } as any];
       } else {
-        output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec do tipo '${cmd}' com o seguinte título gerado: '${newState.activeSpec}'.\nO ambiente foi preparado. Sua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem:\n"🐕 Ambiente preparado para a spec **${newState.activeSpec}**.\nA pasta foi criada.\n\nPara começarmos a fase REQUIREMENTS, me explique:\n1. Qual é o objetivo desta funcionalidade/correção?\n2. Quais são os requisitos técnicos ou de negócios?"\n\nNÃO inicie nenhuma busca. APENAS pergunte e aguarde.` } as any];
+        output.parts = [{ type: "text", text: `[CARAMELO SYSTEM] O usuário iniciou uma spec do tipo '${cmd}' com o seguinte título gerado: '${newState.activeSpec}'.\nO ambiente foi preparado e a pasta '.caramelo/specs/${newState.activeSpec}/' foi criada para você armazenar os artefatos (requirements.md, design.md, tasks.md, bugfix.md).\n\nSua ÚNICA tarefa agora é responder ao usuário com a seguinte mensagem:\n"🐕 Ambiente preparado para a spec **${newState.activeSpec}**.\nA pasta '.caramelo/specs/${newState.activeSpec}' foi criada.\n\nPara começarmos a fase REQUIREMENTS, me explique:\n1. Qual é o objetivo desta funcionalidade/correção?\n2. Quais são os requisitos técnicos ou de negócios?"\n\nNÃO inicie nenhuma busca. APENAS pergunte e aguarde.` } as any];
       }
       break;
   }

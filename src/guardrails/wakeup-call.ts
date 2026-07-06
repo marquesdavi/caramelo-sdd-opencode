@@ -27,7 +27,7 @@ export async function checkWakeupCall(workspaceRoot: string, phase: Phase, input
 
   // Edge Case C & D: Hard-Stop Limit (3 ou mais falhas) com trava Sistêmica
   if (failCount >= 3) {
-    const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build 3 vezes seguidas.\nPARE IMEDIATAMENTE E PEÇA AJUDA AO HUMANO. Não tente adivinhar a solução.`;
+    const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build 3 vezes seguidas.\nPARE IMEDIATAMENTE. Explique ao humano EXATAMENTE qual é o erro e o que você já tentou.\nQuando o humano destravar você, sua PRIMEIRA ação OBRIGATÓRIA é ler o arquivo inteiro que causou o erro com view_file. Só depois planeje a próxima edição.`;
     try {
       // Ativa o bloqueio sistêmico (impedido de chamar ferramentas)
       const state = loadState(workspaceRoot);
