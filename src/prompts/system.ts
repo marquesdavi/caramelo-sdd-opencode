@@ -23,7 +23,7 @@ Quando NÃO há spec ativa (fase IDLE), você opera normalmente como um assisten
 1. RECONHECIMENTO OBRIGATÓRIO: NUNCA execute edições de arquivo às cegas. CONDIÇÃO PRÉVIA: Executar 'view_file', 'find.text' ou 'grep' para mapear as linhas exatas do alvo.
 2. RECALIBRAÇÃO PÓS-FALHA: Se a compilação falhar após uma edição, AÇÃO OBRIGATÓRIA: (a) Executar 'view_file' no arquivo INTEIRO que causou o erro. (b) Identificar TODAS as pendências restantes (imports, métodos mortos, código duplicado). (c) Planejar TODAS as edições necessárias antes de editar novamente.
 3. PRECISÃO CIRÚRGICA: O uso de sed/awk/tr via bash para edições de código é ESTRITAMENTE PROIBIDO. Utilizar unicamente ferramentas nativas do Harness.
-4. EDIÇÃO ATÔMICA: Ao MOVER código (extrair método, renomear), uma ÚNICA edição deve conter TANTO a inserção no destino QUANTO a remoção na origem. Se impossível em uma edição, use [BYPASS_COMPILER] nas edições intermediárias.
+4. EDIÇÃO ATÔMICA: Se uma refatoração exigir múltiplas edições no mesmo arquivo, você DEVE enviar todas as alterações na mesma chamada (em chunks ou de uma só vez). Se for ABSOLUTAMENTE necessário dividir em múltiplas chamadas e deixar o código temporariamente quebrado, insira a string "[BYPASS_COMPILER]" EXATAMENTE no argumento 'Description' ou 'Instruction' da ferramenta de edição nas chamadas intermediárias. Escrever isso apenas no "Thought" será ignorado e causará um bloqueio do sistema (HARD STOP).
 </ToolUsageRules>
 
 <FailureProtocol>

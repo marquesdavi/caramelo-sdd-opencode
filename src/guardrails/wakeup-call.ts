@@ -1,5 +1,5 @@
 import { Phase } from "../types";
-import { getSessionFailCount } from "./shadow-compiler";
+import { getSessionFailCount, getSessionLastEditedFile } from "./shadow-compiler";
 import { loadState, saveState } from "../engine/state-machine";
 import { logger } from "../utils/logger";
 
@@ -24,10 +24,17 @@ export async function checkWakeupCall(workspaceRoot: string, phase: Phase, input
   }
 
   const failCount = getSessionFailCount(sessionId);
+  const targetPath = (input.args?.filePath || input.args?.file || input.args?.TargetFile || "").toLowerCase();
+  const lastEditedFile = getSessionLastEditedFile(sessionId);
 
-  // Edge Case C & D: Hard-Stop Limit (3 ou mais falhas) com trava Sistêmica
-  if (failCount >= 3) {
-    const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build 3 vezes seguidas.\nPARE IMEDIATAMENTE. Explique ao humano EXATAMENTE qual é o erro e o que você já tentou.\nQuando o humano destravar você, sua PRIMEIRA ação OBRIGATÓRIA é ler o arquivo inteiro que causou o erro com view_file. Só depois planeje a próxima edição.`;
+  let maxFails = 3;
+  if (targetPath && targetPath === lastEditedFile) {
+    maxFails = 6; // Tolerância maior se o agente estiver iterando no mesmo arquivo
+  }
+
+  // Edge Case C & D: Hard-Stop Limit (3 ou 6 falhas) com trava Sistêmica
+  if (failCount >= maxFails) {
+    const msg = `🐕 [CARAMELO] HARD STOP WAKEUP CALL:\nVocê falhou em consertar o build ${maxFails} vezes seguidas.\nPARE IMEDIATAMENTE. Explique ao humano EXATAMENTE qual é o erro e o que você já tentou.\nQuando o humano destravar você, sua PRIMEIRA ação OBRIGATÓRIA é ler o arquivo inteiro que causou o erro com view_file. Só depois planeje a próxima edição.`;
     try {
       // Ativa o bloqueio sistêmico (impedido de chamar ferramentas)
       const state = loadState(workspaceRoot);

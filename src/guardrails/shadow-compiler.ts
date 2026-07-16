@@ -54,6 +54,7 @@ export function getFailFastPipeline(workspaceRoot: string): string[] {
 
 let isCompiling = false;
 let sessionFailCount: Record<string, number> = {};
+let sessionLastEditedFile: Record<string, string> = {};
 
 export function getSessionFailCount(sessionId: string): number {
   return sessionFailCount[sessionId] || 0;
@@ -61,6 +62,10 @@ export function getSessionFailCount(sessionId: string): number {
 
 export function resetSessionFailCount(sessionId: string): void {
   sessionFailCount[sessionId] = 0;
+}
+
+export function getSessionLastEditedFile(sessionId: string): string {
+  return sessionLastEditedFile[sessionId] || "";
 }
 
 function semanticTruncate(text: string): string {
@@ -139,6 +144,7 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
   logger.log(`🐕 [CARAMELO] Pipeline Fail-Fast Ativado: ${pipeline.join(" -> ")}`);
   
   const sessionId = input.sessionID || "default";
+  sessionLastEditedFile[sessionId] = targetPath;
   
   isCompiling = true;
   try {
@@ -167,7 +173,7 @@ export async function checkShadowCompilation(workspaceRoot: string, input: any, 
             `Output da Ferramenta:\n${combinedOutput}\n\n` +
             `Ação exigida: CORRIJA o código no próximo tool call para que este step passe.\n` +
             `Checklist rápido: (1) Esqueceu um import? (2) Deixou código morto/duplicado? (3) Mudou assinatura sem atualizar os callers?\n` +
-            `PROTOCOLO: Se esta edição faz parte de uma SEQUÊNCIA de edições interdependentes, insira [BYPASS_COMPILER] na Description das edições intermediárias. Só compile na última.`;
+            `PROTOCOLO: Se esta edição faz parte de uma SEQUÊNCIA de edições interdependentes, insira [BYPASS_COMPILER] EXATAMENTE no argumento 'Description' ou 'Instruction' da ferramenta nas edições intermediárias. Só compile na última.`;
         } else {
           // Mensagem curta para falhas subsequentes (Evitar Context Rot)
           msg = `🐕 [CARAMELO] Falha no Build (${cmd}):\n${combinedOutput}\nANTES de editar, LEIA o arquivo com view_file para ver o estado real. Procure: imports faltando, código duplicado, métodos mortos.`;
